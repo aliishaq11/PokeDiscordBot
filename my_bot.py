@@ -1,6 +1,7 @@
 import discord
 import random
 import json
+import bot_token
 
 client = discord.Client()
 
@@ -36,6 +37,7 @@ the !join command. Some other commands are:
     
     if message.content.startswith('!iwin'):
         data[str(message.author)]['win'] += 1
+        data[str(message.author)]['coins'] += 40
         with open('data.json', 'w') as outfile:
             json.dump(data, outfile)
         print(data[str(message.author)]['win'])
@@ -63,6 +65,7 @@ the !join command. Some other commands are:
 
     if message.content.startswith('!ilose'):
         data[str(message.author)]['loss'] += 1
+        data[str(message.author)]['coins'] += 20
         with open('data.json', 'w') as outfile:
             json.dump(data, outfile)
         print(data[str(message.author)]['loss'])
@@ -96,4 +99,4 @@ async def on_ready():
     print('------')
     print(data)
 
-client.run('NTMzNzU1MDAzNjM1MjM2ODY1.DxvsFQ._2QC7nqT75gwcESwPfEj0n9E3dw')
+client.run(bot_token.bot_token)
