@@ -18,10 +18,10 @@ async def on_message(message):
 
     if message.content.startswith('!help'):
         msg = """Hello {0.author.mention}, in order to get started, please type
-the !join command. Some other commands are: 
-    !myprofile - Shows you your Trainer profile 
+the !join command. Some other commands are:
+    !myprofile - Shows you your Trainer profile
     more to come""".format(message)
-        await client.send_message(message.channel, msg)
+        await message.channel.send(msg)
 
     if message.content.startswith('!join'):
         for x in range(6):
@@ -29,12 +29,12 @@ the !join command. Some other commands are:
             data[str(message.author)] = {'win': 0, 'loss': 0, 'coins': 0, 'pokemon': pokemon}
         with open('data.json', 'w') as outfile:
             json.dump(data, outfile)
-        await client.send_message(message.channel, pokemon)
+        await message.channel.send(pokemon)
 
     if message.content.startswith('!myprofile'):
         mypoke = data[str(message.author)]
-        await client.send_message(message.channel, mypoke)
-    
+        await message.channel.send(mypoke)
+
     if message.content.startswith('!iwin'):
         data[str(message.author)]['win'] += 1
         data[str(message.author)]['coins'] += 40
@@ -42,12 +42,12 @@ the !join command. Some other commands are:
             json.dump(data, outfile)
         print(data[str(message.author)]['win'])
         win_msg = "Your win has been recorded! You now have {} wins!".format(data[str(message.author)]['win'])
-        await client.send_message(message.channel, win_msg)
+        await message.channel.send(win_msg)
         if data[str(message.author)]['win']%2==0:
             roll = random.randint(1,809)
-            roll_msg = "You have won 3 games! Here is your roll: {}. Would you like to keep this roll or reroll?".format(roll)
-            await client.send_message(message.channel, roll_msg)
-            msg = await client.wait_for_message(author=message.author,
+            roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to keep this roll or reroll?".format(roll)
+            await message.channel.send(roll_msg)
+            msg = await client.wait_for(author=message.author,
                                                 check=message.author)
             if msg.content.startswith('!reroll'):
                 roll = random.randint(1,809)
@@ -55,11 +55,11 @@ the !join command. Some other commands are:
                 data[str(message.author)]['pokemon'].append(roll)
                 with open('data.json', 'w') as outfile:
                     json.dump(data, outfile)
-                await client.send_message(message.channel, reroll_msg)
+                await message.channel.send(reroll_msg)
             elif msg.content.startswith('!keep'):
                 keep_msg = "You have kept: {}".format(roll)
                 data[str(message.author)]['pokemon'].append(roll)
-                await client.send_message(message.channel, keep_msg)
+                await message.channel.send(keep_msg)
                 with open('data.json', 'w') as outfile:
                     json.dump(data, outfile)
 
@@ -70,12 +70,12 @@ the !join command. Some other commands are:
             json.dump(data, outfile)
         print(data[str(message.author)]['loss'])
         lose_msg = "Your loss has been recorded! You now have {} losses!".format(data[str(message.author)]['loss'])
-        await client.send_message(message.channel, lose_msg)
+        await message.channel.send(lose_msg)
         if data[str(message.author)]['loss']%3==0:
             roll = random.randint(1,809)
             roll_msg = "You have lost 3 games. Here is your roll: {}. Would you like to keep this roll or reroll?".format(roll)
-            await client.send_message(message.channel, roll_msg)
-            msg = await client.wait_for_message(author=message.author,
+            await message.channel.send(roll_msg)
+            msg = await client.wait_for(author=message.author,
                                                 check=message.author)
             if msg.content.startswith('!reroll'):
                 roll = random.randint(1,809)
@@ -83,16 +83,17 @@ the !join command. Some other commands are:
                 data[str(message.author)]['pokemon'].append(roll)
                 with open('data.json', 'w') as outfile:
                     json.dump(data, outfile)
-                await client.send_message(message.channel, reroll_msg)
+                await message.channel.send(reroll_msg)
             elif msg.content.startswith('!keep'):
                 keep_msg = "You have kept: {}".format(roll)
                 data[str(message.author)]['pokemon'].append(roll)
-                await client.send_message(message.channel, keep_msg)
+                await message.channel.send(keep_msg)
                 with open('data.json', 'w') as outfile:
                     json.dump(data, outfile)
 
 @client.event
 async def on_ready():
+    print(discord.__version__)
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
