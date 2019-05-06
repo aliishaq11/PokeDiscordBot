@@ -2,13 +2,14 @@ import discord
 import random
 import json
 import bot_token
+import pymongo
+from pymongo import MongoClient
 
 client = discord.Client()
-
+mongo = MongoClient('mongodb://localhost:27017/')
+db = mongo['PokeDiscordBot']
+profiles = db.profiles
 pokemon = []
-data = {}
-with open('data.json') as json_file:
-    data = json.load(json_file)
 
 @client.event
 async def on_message(message):
@@ -24,12 +25,16 @@ the !join command. Some other commands are:
         await message.channel.send(msg)
 
     if message.content.startswith('!join'):
-        for x in range(6):
-            pokemon.append(random.randint(1,809))
-            data[str(message.author)] = {'win': 0, 'loss': 0, 'coins': 0, 'pokemon': pokemon}
-        with open('data.json', 'w') as outfile:
-            json.dump(data, outfile)
-        await message.channel.send(pokemon)
+        profileID = str(message.author.name) + str(message.author.discriminator)
+        if profiles.find_one({"user": profileID}):
+            msg = "You have already joined! To view your profile, type !myprofile"
+            await message.channel.send(msg)
+        else:
+            for x in range(6):
+                pokemon.append(random.randint(1,809))
+            profile = {'user': profileID, 'win': 0, 'loss': 0, 'coins': 0, 'pokemon': pokemon}
+            profiles.insert_one(profile).inserted_id 
+            await message.channel.send(pokemon)
 
     if message.content.startswith('!myprofile'):
         mypoke = data[str(message.author)]
@@ -45,10 +50,12 @@ the !join command. Some other commands are:
         await message.channel.send(win_msg)
         if data[str(message.author)]['win']%2==0:
             roll = random.randint(1,809)
-            roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to keep this roll or reroll?".format(roll)
+            roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
             await message.channel.send(roll_msg)
-            msg = await client.wait_for(author=message.author,
-                                                check=message.author)
+            def pred(m):
+                return m.author == message.author and m.channel == message.channel
+            msg = await client.wait_for('message',
+                                                check=pred)
             if msg.content.startswith('!reroll'):
                 roll = random.randint(1,809)
                 reroll_msg = "Here is your roll: {}".format(roll)
@@ -73,10 +80,12 @@ the !join command. Some other commands are:
         await message.channel.send(lose_msg)
         if data[str(message.author)]['loss']%3==0:
             roll = random.randint(1,809)
-            roll_msg = "You have lost 3 games. Here is your roll: {}. Would you like to keep this roll or reroll?".format(roll)
+            roll_msg = "You have lost 3 games. Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
             await message.channel.send(roll_msg)
-            msg = await client.wait_for(author=message.author,
-                                                check=message.author)
+            def pred(m):
+                return m.author == message.author and m.channel == message.channel
+            msg = await client.wait_for('message',
+                                                check=pred)
             if msg.content.startswith('!reroll'):
                 roll = random.randint(1,809)
                 reroll_msg = "Here is your roll: {}".format(roll)
@@ -96,8 +105,7 @@ async def on_ready():
     print(discord.__version__)
     print('Logged in as')
     print(client.user.name)
-    print(client.user.id)
     print('------')
-    print(data)
+    db.list_collection_names()
 
 client.run(bot_token.bot_token)
