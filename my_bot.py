@@ -4,12 +4,17 @@ import json
 import bot_token
 import pymongo
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 
 client = discord.Client()
-mongo = MongoClient('mongodb://localhost:27017/')
-db = mongo['PokeDiscordBot']
+mongo = MongoClient('localhost', 27017)
+db = mongo.PokeDiscordBot
 profiles = db.profiles
 pokemon = []
+
+def profileName(name, discriminator):
+    profileID = str(name) + str(discriminator)
+    return profileID
 
 @client.event
 async def on_message(message):
@@ -25,19 +30,20 @@ the !join command. Some other commands are:
         await message.channel.send(msg)
 
     if message.content.startswith('!join'):
-        profileID = str(message.author.name) + str(message.author.discriminator)
-        if profiles.find_one({"user": profileID}):
+        profileID = profileName(message.author.name, message.author.discriminator)
+        if profiles.count_documents({"user": profileID}) != 0:
             msg = "You have already joined! To view your profile, type !myprofile"
             await message.channel.send(msg)
         else:
             for x in range(6):
                 pokemon.append(random.randint(1,809))
             profile = {'user': profileID, 'win': 0, 'loss': 0, 'coins': 0, 'pokemon': pokemon}
-            profiles.insert_one(profile).inserted_id 
+            profiles.insert_one(profile)
             await message.channel.send(pokemon)
 
     if message.content.startswith('!myprofile'):
-        mypoke = data[str(message.author)]
+        mypoke = profiles.find_one({"user": profileName(message.author.name,
+                                               message.author.discriminator)})
         await message.channel.send(mypoke)
 
     if message.content.startswith('!iwin'):
