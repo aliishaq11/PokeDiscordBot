@@ -64,18 +64,21 @@ the !join command. Some other commands are:
         profile = profiles.find_one({"discordID": message.author.id})
         await message.channel.send(profile)
 
-    # Allow user to record their win. Increment wins by 1 and coins by 40.
-    # Every 2 wins means a new roll for the User.
-    # TECH DEBT ALERT
-    # - Win message gets sent before win is incremented (HIGH PRIO)
+    # Allow user to record their wins and losses. Increment wins by 1 and coins
+    # by 40. Increment loss by 1 and coins by 20.
+    # Every 2 wins means a new roll for the User. Every 3 losses means new roll.
+    ###### BUG ALERT ########
+    # - The state of data and client is off by 1 win/loss (?????) Modulus gets
+    # activated 1 win/loss too late. When recording VERY first win/loss, system
+    # sends message of 0 wins/losses, but DB has properly recorded the record.
     # TO-DO
     # - Handle duplicate rolls
     # SPIKE
     # - Some sort of validation between parties so !iwin isn't spammed? We
     # could potentially require the input to be: !iwin <user> for the sake of
-    # accountability
+    # accountability, and that could potentially not require loser to put !ilose.
     # - Should we limit to 1 battle a day? People will receive rolls far too
-    # quickly otherwise
+    # quickly otherwise.
     if message.content.startswith('!iwin'):
         profile = profiles.find_one({'discordID': message.author.id})
         updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
@@ -100,7 +103,6 @@ the !join command. Some other commands are:
                 profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(keep_msg)
 
-    # Everything below here has not been converted to go through MongoDB.
     if message.content.startswith('!ilose'):
         updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                         {"loss": 1, "coins": 20}})
@@ -117,16 +119,12 @@ the !join command. Some other commands are:
             if msg.content.startswith('!reroll'):
                 roll = random.randint(1,809)
                 reroll_msg = "Here is your roll: {}".format(roll)
-                data[str(message.author)]['pokemon'].append(roll)
-                with open('data.json', 'w') as outfile:
-                    json.dump(data, outfile)
+                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(reroll_msg)
             elif msg.content.startswith('!keep'):
                 keep_msg = "You have kept: {}".format(roll)
-                data[str(message.author)]['pokemon'].append(roll)
+                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(keep_msg)
-                with open('data.json', 'w') as outfile:
-                    json.dump(data, outfile)
 
 @client.event
 async def on_ready():
@@ -134,6 +132,5 @@ async def on_ready():
     print('Logged in as')
     print(client.user.name)
     print('------')
-    db.list_collection_names()
 
 client.run(bot_token.bot_token)
