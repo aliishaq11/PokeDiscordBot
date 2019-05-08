@@ -67,10 +67,6 @@ the !join command. Some other commands are:
     # Allow user to record their wins and losses. Increment wins by 1 and coins
     # by 40. Increment loss by 1 and coins by 20.
     # Every 2 wins means a new roll for the User. Every 3 losses means new roll.
-    ###### BUG ALERT ########
-    # - The state of data and client is off by 1 win/loss (?????) Modulus gets
-    # activated 1 win/loss too late. When recording VERY first win/loss, system
-    # sends message of 0 wins/losses, but DB has properly recorded the record.
     # TO-DO
     # - Handle duplicate rolls
     # SPIKE
@@ -80,10 +76,10 @@ the !join command. Some other commands are:
     # - Should we limit to 1 battle a day? People will receive rolls far too
     # quickly otherwise.
     if message.content.startswith('!iwin'):
-        profile = profiles.find_one({'discordID': message.author.id})
         updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                      {"wins": 1, "coins": 40}})
-        win_msg = "Your win has been recorded."
+        profile = profiles.find_one({'discordID': message.author.id})
+        win_msg = "Your win has been recorded. You now have {} wins!".format(profile['wins'])
         await message.channel.send(win_msg)
         if profile['wins']%2==0:
             roll = random.randint(1,809)
@@ -106,7 +102,8 @@ the !join command. Some other commands are:
     if message.content.startswith('!ilose'):
         updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                         {"loss": 1, "coins": 20}})
-        lose_msg = "Your loss has been recorded."
+        profile = profiles.find_one({'discordID': message.author.id})
+        lose_msg = "Your loss has been recorded. You now have {} losses.".format(profile['loss'])
         await message.channel.send(lose_msg)
         if profile['loss']%3==0:
             roll = random.randint(1,809)
