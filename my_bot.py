@@ -27,7 +27,10 @@ async def on_message(message):
         msg = """Hello {0.author.mention}, in order to get started, please type
 the !join command. Some other commands are:
     !myprofile - Shows you your Trainer profile
-    more to come""".format(message)
+    !win - wip
+    !reroll - wip
+    !keep - wip
+    !ilose - wip """.format(message)
         await message.channel.send(msg)
 
     # !join command. Init User object, generate list of 6 pokemon, and send message to user
