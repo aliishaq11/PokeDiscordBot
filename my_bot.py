@@ -5,12 +5,12 @@ import bot_token
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
+import requests
 
 client = discord.Client()
 mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
-pokemon = []
 
 def profileName(name, discriminator):
     profileID = str(name) + str(discriminator)
@@ -45,13 +45,14 @@ the !join command. Some other commands are:
             msg = "You have already joined! To view your profile, type !myprofile"
             await message.channel.send(msg)
         else:
+            pokemon = []
             for x in range(6):
                 pokemon.append(random.randint(1,809))
-            profile = {'discordID': message.author.id, 
-                       'user': profileName(message.author.name, message.author.discriminator), 
-                       'wins': 0, 
-                       'loss': 0, 
-                       'coins': 0, 
+            profile = {'discordID': message.author.id,
+                       'user': profileName(message.author.name, message.author.discriminator),
+                       'wins': 0,
+                       'loss': 0,
+                       'coins': 0,
                        'pokemon': pokemon}
             profiles.insert_one(profile)
             await message.channel.send(pokemon)
@@ -125,6 +126,22 @@ the !join command. Some other commands are:
                 keep_msg = "You have kept: {}".format(roll)
                 profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(keep_msg)
+
+    if message.content.startswith('!pic'):
+        pokename = message.content.strip('!pic ')
+        if pokename == "":
+            msg = 'Make sure to use "!pic <name/dex>"'
+            await message.channel.send(msg)
+        else:
+            r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(pokename))
+            if r.status_code == requests.codes.ok:
+                r = json.loads(r.text)
+                picture = r["sprites"]["front_default"]
+                msg = picture
+                await message.channel.send(msg)
+            else:
+                msg = "Error getting data: " + str(r.status_code)
+                await message.channel.send(msg)
 
 @client.event
 async def on_ready():
