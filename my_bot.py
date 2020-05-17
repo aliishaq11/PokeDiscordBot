@@ -12,6 +12,18 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 
+def getLinkedImage(dexId):
+    r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
+    if r.status_code == requests.codes.ok:
+        r = json.loads(r.text)
+        picture = r["sprites"]["front_default"]
+        pokename = r['name']
+        msg = [picture]('https://www.serebii.net/pokedex-swsh/{}'.format(pokename))
+    else:
+        msg = "Error getting data: " + str(r.status_code)
+    return msg
+
+
 def profileName(name, discriminator):
     profileID = str(name) + str(discriminator)
     return profileID
@@ -86,7 +98,8 @@ the !join command. Some other commands are:
         win_msg = "Your win has been recorded. You now have {} wins!".format(profile['wins'])
         await message.channel.send(win_msg)
         if profile['wins']%2==0:
-            roll = random.randint(1,809)
+            rando = random.randint(1,809)
+            roll = getLinkedImage(rando)
             roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
             await message.channel.send(roll_msg)
             def pred(m):
@@ -94,7 +107,8 @@ the !join command. Some other commands are:
             msg = await client.wait_for('message',
                                                 check=pred)
             if msg.content.startswith('!reroll'):
-                roll = random.randint(1,809)
+                rando = random.randint(1,809)
+                roll = getLinkedImage(rando)
                 reroll_msg = "Here is your roll: {}".format(roll)
                 profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(reroll_msg)
@@ -126,23 +140,6 @@ the !join command. Some other commands are:
                 keep_msg = "You have kept: {}".format(roll)
                 profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(keep_msg)
-
-    if message.content.startswith('!pic'):
-        pokename = message.content.strip('!pic ')
-        if pokename == "":
-            msg = 'Make sure to use "!pic <name/dex>"'
-            await message.channel.send(msg)
-        else:
-            r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(pokename))
-            if r.status_code == requests.codes.ok:
-                r = json.loads(r.text)
-                picture = r["sprites"]["front_default"]
-                msg = picture
-                await message.channel.send(msg)
-            else:
-                msg = "Error getting data: " + str(r.status_code)
-                await message.channel.send(msg)
-
 @client.event
 async def on_ready():
     print(discord.__version__)
