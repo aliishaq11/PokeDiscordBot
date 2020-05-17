@@ -12,14 +12,26 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 
-def getLinkedImage(dexId):
-    r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
-    if r.status_code == requests.codes.ok:
-        r = json.loads(r.text)
-        picture = r["sprites"]["front_default"]
+def getImage(dexId):
+    if type(dexId) == list:
+        for x in dexId:
+            r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(x))
+            getImageResult = []
+            if r.status_code == requests.codes.ok:
+                r = json.loads(r.text)
+                picture = r["sprites"]["front_default"]
+                getImageResult.append(picture)
+            else:
+                error = "Error getting data: " + str(r.status_code)
+                getImageResult.append(error)
     else:
-        msg = "Error getting data: " + str(r.status_code)
-    return msg
+        r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
+        if r.status_code == requests.codes.ok:
+            r = json.loads(r.text)
+            picture = r["sprites"]["front_default"]
+        else:
+            getImageResult = "Error getting data: " + str(r.status_code)
+    return getImageResult
 
 
 def profileName(name, discriminator):
@@ -97,7 +109,7 @@ the !join command. Some other commands are:
         await message.channel.send(win_msg)
         if profile['wins']%2==0:
             rando = random.randint(1,809)
-            roll = getLinkedImage(rando)
+            roll = getImage(rando)
             roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
             await message.channel.send(roll_msg)
             def pred(m):
@@ -106,7 +118,7 @@ the !join command. Some other commands are:
                                                 check=pred)
             if msg.content.startswith('!reroll'):
                 rando = random.randint(1,809)
-                roll = getLinkedImage(rando)
+                roll = getImage(rando)
                 reroll_msg = "Here is your roll: {}".format(roll)
                 profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
                 await message.channel.send(reroll_msg)
