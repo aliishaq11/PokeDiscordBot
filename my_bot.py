@@ -17,8 +17,6 @@ def getLinkedImage(dexId):
     if r.status_code == requests.codes.ok:
         r = json.loads(r.text)
         picture = r["sprites"]["front_default"]
-        pokename = r['name']
-        msg = [picture]('https://www.serebii.net/pokedex-swsh/{}'.format(pokename))
     else:
         msg = "Error getting data: " + str(r.status_code)
     return msg
