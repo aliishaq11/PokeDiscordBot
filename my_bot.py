@@ -6,12 +6,15 @@ import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import requests
+from PIL import Image
+from io import BytesIO
 
 client = discord.Client()
 mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 
+#If we're just getting images we can pass in the number straight to image files that aren't hosted by the API, see createImage()
 def getImage(dexId):
     if type(dexId) == list:
         for x in dexId:
@@ -28,10 +31,44 @@ def getImage(dexId):
         r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
         if r.status_code == requests.codes.ok:
             r = json.loads(r.text)
-            picture = r["sprites"]["front_default"]
+            getImageResult = r["sprites"]["front_default"]
         else:
             getImageResult = "Error getting data: " + str(r.status_code)
     return getImageResult
+
+
+#Only works for teams of 6
+#Join teamPicture and createImage into 1?
+#Can't await from inside the function, returning True just for some kind of error checking
+def teamPicture(teamArray):
+    dst = Image.new('RGBA', (576, 96), (255, 0, 0, 0))
+    for i in range(6):
+        dst.paste(teamArray[i], (96 * i,0))
+    return dst
+
+def createImage(pokemon):
+    teamArray = []
+    for i in range(6):
+        count = 0
+        r = requests.get("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{}.png".format(pokemon[i]))
+        img = Image.open(BytesIO(r.content))
+        teamArray.append(img)
+        count += 1
+    teamPicture(teamArray).save('data/teamPicture.png')
+    return True
+
+
+#Rerolling function
+def rerolls(msg, roll, id):
+    if msg.content.startswith('!reroll'):
+        rando = random.randint(1,809)
+        roll = getImage(rando)
+        newMsg = "Here is your new pokemon: {}".format(roll)
+        profiles.find_one_and_update({'discordID':id}, {'$push': {'pokemon': rando}})
+    elif msg.content.startswith('!keep'):
+        newMsg = "You have kept: {}".format(roll)
+        profiles.find_one_and_update({'discordID': id}, {'$push': {'pokemon': roll}})
+    return newMsg
 
 
 def profileName(name, discriminator):
@@ -77,7 +114,9 @@ the !join command. Some other commands are:
                        'coins': 0,
                        'pokemon': pokemon}
             profiles.insert_one(profile)
-            await message.channel.send(pokemon)
+            check = createImage(pokemon)
+            if check == True:
+                await message.channel.send(file=discord.File('data/teamPicture.png'))
 
     # Call User's profile using discordID
     # TO-DO
@@ -110,22 +149,19 @@ the !join command. Some other commands are:
         if profile['wins']%2==0:
             rando = random.randint(1,809)
             roll = getImage(rando)
-            roll_msg = "You have won 2 games! Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
-            await message.channel.send(roll_msg)
+            #roll_msg = "You have won 2 games! Would you like to !keep or !reroll: [Pokename]({})".format(roll)
+            roll_msg = discord.Embed(
+                title = 'New Pokemon!',
+                description = 'You have won 2 games! Would you like to !keep or !reroll: [Pokename]'
+            )
+            roll_msg.set_image(url=getImage(rando))
+            #await message.channel.send(roll_msg)
+            await message.channel.send(embed=roll_msg)
             def pred(m):
                 return m.author == message.author and m.channel == message.channel
             msg = await client.wait_for('message',
                                                 check=pred)
-            if msg.content.startswith('!reroll'):
-                rando = random.randint(1,809)
-                roll = getImage(rando)
-                reroll_msg = "Here is your roll: {}".format(roll)
-                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
-                await message.channel.send(reroll_msg)
-            elif msg.content.startswith('!keep'):
-                keep_msg = "You have kept: {}".format(roll)
-                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
-                await message.channel.send(keep_msg)
+            await message.channel.send(rerolls(msg, rando, message.author.id))
 
     if message.content.startswith('!ilose'):
         updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
@@ -134,22 +170,23 @@ the !join command. Some other commands are:
         lose_msg = "Your loss has been recorded. You now have {} losses.".format(profile['loss'])
         await message.channel.send(lose_msg)
         if profile['loss']%3==0:
-            roll = random.randint(1,809)
-            roll_msg = "You have lost 3 games. Here is your roll: {}. Would you like to !keep or !reroll?".format(roll)
+            rando = random.randint(1,809)
+            roll = getImage(rando)
+            roll_msg = "You have lost 3 games. Would you like to !keep or !reroll your new: {}".format(roll)
             await message.channel.send(roll_msg)
             def pred(m):
                 return m.author == message.author and m.channel == message.channel
             msg = await client.wait_for('message',
                                                 check=pred)
-            if msg.content.startswith('!reroll'):
-                roll = random.randint(1,809)
-                reroll_msg = "Here is your roll: {}".format(roll)
-                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
-                await message.channel.send(reroll_msg)
-            elif msg.content.startswith('!keep'):
-                keep_msg = "You have kept: {}".format(roll)
-                profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': roll}})
-                await message.channel.send(keep_msg)
+            await message.channel.send(rerolls(msg, rando, message.author.id))
+
+
+    #IMAGES TEST
+    if message.content.startswith('!a'):
+        teamArray = []
+        profile = profiles.find_one({'discordID': message.author.id})
+        createImage(profile["pokemon"])
+
 @client.event
 async def on_ready():
     print(discord.__version__)
