@@ -6,7 +6,6 @@ import bot_token
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-import requests #moving from requests to aiohttp // All done but second check just in case
 import aiohttp
 from PIL import Image
 from io import BytesIO
@@ -21,7 +20,7 @@ async def getName(dexId):
         if type(dexId) == list:
             namesList = []
             for i in dexId:
-                async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+                async with session.get(f'https://pokeapi.co/api/v2/pokemon/{i}/') as r:
                     if r.status == 200:
                         r = await r.json()
                         name = r['name'].capitalize()
@@ -31,7 +30,7 @@ async def getName(dexId):
             return namesList
 
         else:
-            async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId)) as r:
+            async with session.get(f'https://pokeapi.co/api/v2/pokemon/{dexId}/') as r:
                 if r.status == 200:
                     r = await r.json()
                     name = r['name'].capitalize()
@@ -45,7 +44,7 @@ async def getImage(dexId):
 
         if type(dexId) == list:
             for i in dexId:
-                async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+                async with session.get(f'https://pokeapi.co/api/v2/pokemon/{i}/') as r:
                     getImageResult = []
                     if r.status == 200:
                         r = await r.json()
@@ -55,7 +54,7 @@ async def getImage(dexId):
                         error = "Error getting data: " + str(r.status)
                         getImageResult.append(error)
         else:
-            async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+            async with session.get(f'https://pokeapi.co/api/v2/pokemon/{dexId}/') as r:
                 if r.status == 200:
                     r = await r.json()
                     getImageResult = r["sprites"]["front_default"]
@@ -69,15 +68,15 @@ async def joinRerolls(pokemon, message):
     pnn = await getName(pokemon)
     rerolls = 2
     while True:
-        await message.channel.send("""Your Pokemon are:
-        1. {}
-        2. {}
-        3. {}
-        4. {}
-        5. {}
-        6. {}""".format(pnn[0],pnn[1],pnn[2],pnn[3],pnn[4],pnn[5]))
+        await message.channel.send(f"""Your Pokemon are:
+        1. {pnn[0]}
+        2. {pnn[1]}
+        3. {pnn[2]}
+        4. {pnn[3]}
+        5. {pnn[4]}
+        6. {pnn[5]}""")
         if rerolls > 0:
-            await message.channel.send('Would you like to "!keep" or "!reroll <name/list number>"? You have {} rerolls left.'.format(rerolls))
+            await message.channel.send(f'Would you like to "!keep" or "!reroll <name/list number>"? You have {rerolls} rerolls left.')
             def pred(m):
                 return m.author == message.author and m.channel == message.channel and (m.content.startswith('!keep') or m.content.startswith('!reroll'))
             try:
@@ -115,8 +114,8 @@ async def joinRerolls(pokemon, message):
 async def createImage(pokemon):
     teamArray = []
     async with aiohttp.ClientSession() as session:
-        for i in range(6):
-            async with session.get('https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{}.png'.format(pokemon[i])) as r:
+        for i in pokemon:
+            async with session.get(f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{i}.png') as r:
                 if r.status == 200:
                     r = await r.read()
                     img = Image.open(BytesIO(r))
@@ -139,11 +138,11 @@ async def rerolls(roll, message):
     if msg.content.startswith('!reroll'):
         rando = random.randint(1,809)
         roll = await getImage(rando)
-        newMsg = "Here is your new pokemon: {}".format(roll)
+        newMsg = f"Here is your new pokemon: {roll}"
         profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
         await message.channel.send(newMsg)
     elif msg.content.startswith('!keep'):
-        newMsg = "You have kept: {}".format(roll)
+        newMsg = f"You have kept: {roll}"
         profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
         await message.channel.send(newMsg)
 
@@ -161,7 +160,7 @@ async def on_message(message):
     # !help command
     if message.content.startswith('!help'):
         msg = discord.Embed(
-            title = 'Hello {0.author.name}'.format(message),
+            title = f'Hello {message.author.name}',
             description = """In order to get started, please type the !join command. Some other commands are:
     !myprofile - Shows you your Trainer profile
     !win - wip
@@ -211,19 +210,19 @@ async def on_message(message):
         if profiles.count_documents({"user": profileID}) != 0:
             profilemsg = discord.Embed(
                 #title = "Trainer "+ message.author.name,
-                description = 'Total games: {}'.format(profile['wins'] + profile['loss'])
+                description = f'Total games: {profile["wins"] + profile["loss"]}'
             )
             profilemsg.set_author(name='Trainer ' + message.author.name, icon_url=message.author.avatar_url)
             image = discord.File('data/teamPicture.png', filename='teamPicture.png') #Save images to <id>.png and call them back?
             profilemsg.set_image(url='attachment://teamPicture.png')
-            profilemsg.add_field(name='Wins', value='{}'.format(profile['wins']))
-            profilemsg.add_field(name='Losses', value='{}'.format(profile['loss']))
-            profilemsg.add_field(name='Coins', value='{}'.format(profile['coins']))
+            profilemsg.add_field(name='Wins', value=f'{profile["wins"]}')
+            profilemsg.add_field(name='Losses', value=f'{profile["loss"]}')
+            profilemsg.add_field(name='Coins', value=f'{profile["coins"]}')
             #profilemsg.set_thumbnail(url=message.author.avatar_url)
 
 
             await message.channel.send(file=image, embed=profilemsg)
-            await message.channel.send("Pokemons list WIP: {}".format(profile['pokemon']))
+            await message.channel.send(f"Pokemons list WIP: {profile['pokemon']}")
         else:
             await message.channel.send('You have not joined yet, type "!join" first.')
 
@@ -243,14 +242,14 @@ async def on_message(message):
         updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                      {"wins": 1, "coins": 40}})
         profile = profiles.find_one({'discordID': message.author.id})
-        win_msg = "Your win has been recorded. You now have {} wins!".format(profile['wins'])
+        win_msg = f"Your win has been recorded. You now have {profile['wins']} wins!"
         await message.channel.send(win_msg)
 
         if profile['wins']%2==0:
             rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
-                description = 'You have won 2 games! Would you like to !keep or !reroll: {}'.format(await getName(rando))
+                description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
             )
             roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
@@ -261,13 +260,13 @@ async def on_message(message):
         updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                         {"loss": 1, "coins": 20}})
         profile = profiles.find_one({'discordID': message.author.id})
-        lose_msg = "Your loss has been recorded. You now have {} losses.".format(profile['loss'])
+        lose_msg = f"Your loss has been recorded. You now have {profile['loss']} losses."
         await message.channel.send(lose_msg)
         if profile['loss']%3==0:
             rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
-                description = 'You have lost 3 games. Would you like to !keep or !reroll: {}'.format(await getName(rando))
+                description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
             )
             roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
