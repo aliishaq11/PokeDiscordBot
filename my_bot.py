@@ -173,10 +173,6 @@ async def on_message(message):
 
     # !join command. Init User object, generate list of 6 pokemon, and send message to user
     # containing Pokemon. If User has already joined, throw error.
-    # TO-DO
-    # - Do not allow duplicate pokemon to be rolled as starting 6
-    # - Allow 2 rerolls for starting 6 (requires input of which need to be rerolled)
-    # - Format message, it's ugly as your mom right now
     if message.content.startswith('!join'):
         profileID = profileName(message.author.name, message.author.discriminator)
         if profiles.count_documents({"user": profileID}) != 0:
@@ -199,12 +195,6 @@ async def on_message(message):
                 await message.channel.send(file=discord.File('data/teamPicture.png'))
 
     # Call User's profile using discordID
-    # TO-DO
-    # - Call other user's profiles outside of your own
-    # - Format message, it's ugly as you right now
-    # SPIKE
-    # - Do we want a user's profile to persist across all discord servers? If so,
-    # should we think about multiple profiles? If so, how do we handle that?
     if message.content.startswith('!myprofile'):
         profileID = profileName(message.author.name, message.author.discriminator)
         profile = profiles.find_one({"discordID": message.author.id})
@@ -231,14 +221,6 @@ async def on_message(message):
     # Allow user to record their wins and losses. Increment wins by 1 and coins
     # by 40. Increment loss by 1 and coins by 20.
     # Every 2 wins means a new roll for the User. Every 3 losses means new roll.
-    # TO-DO
-    # - Handle duplicate rolls
-    # SPIKE
-    # - Some sort of validation between parties so !iwin isn't spammed? We
-    # could potentially require the input to be: !iwin <user> for the sake of
-    # accountability, and that could potentially not require loser to put !ilose.
-    # - Should we limit to 1 battle a day? People will receive rolls far too
-    # quickly otherwise.
     if message.content.startswith('!iwin'):
         updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
                                                                      {"wins": 1, "coins": 40}})
