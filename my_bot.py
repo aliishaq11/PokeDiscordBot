@@ -6,7 +6,8 @@ import bot_token
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-import requests
+import requests #moving from requests to aiohttp // All done but second check just in case
+import aiohttp
 from PIL import Image
 from io import BytesIO
 
@@ -15,53 +16,57 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 
-def getName(dexId):
-    if type(dexId) == list:
-        namesList = []
+async def getName(dexId):
+    async with aiohttp.ClientSession() as session:
+        if type(dexId) == list:
+            namesList = []
+            for i in dexId:
+                async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+                    if r.status == 200:
+                        r = await r.json()
+                        name = r['name'].capitalize()
+                        namesList.append(name)
+                    else:
+                        namesList.append('Error getting name')
+            return namesList
 
-        for i in dexId:
-            r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i))
-            if r.status_code == requests.codes.ok:
-                r = json.loads(r.text)
-                name = r['name'].capitalize()
-                namesList.append(name)
-            else:
-                namesList.append('Error getting name')
-        return namesList
-    else:
-        r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
-        if r.status_code == requests.codes.ok:
-            r = json.loads(r.text)
-            name = r['name'].capitalize()
         else:
-            name = 'Error getting name'
-        return name
+            async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId)) as r:
+                if r.status == 200:
+                    r = await r.json()
+                    name = r['name'].capitalize()
+                else:
+                    name = 'Error getting name'
+            return name
 
 #If we're just getting images we can pass in the number straight to image files that aren't hosted by the API, see createImage() requests
-def getImage(dexId):
-    if type(dexId) == list:
-        for x in dexId:
-            r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(x))
-            getImageResult = []
-            if r.status_code == requests.codes.ok:
-                r = json.loads(r.text)
-                picture = r["sprites"]["front_default"]
-                getImageResult.append(picture)
-            else:
-                error = "Error getting data: " + str(r.status_code)
-                getImageResult.append(error)
-    else:
-        r = requests.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(dexId))
-        if r.status_code == requests.codes.ok:
-            r = json.loads(r.text)
-            getImageResult = r["sprites"]["front_default"]
+async def getImage(dexId):
+    async with aiohttp.ClientSession() as session:
+
+        if type(dexId) == list:
+            for i in dexId:
+                async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+                    getImageResult = []
+                    if r.status == 200:
+                        r = await r.json()
+                        picture = r["sprites"]["front_default"]
+                        getImageResult.append(picture)
+                    else:
+                        error = "Error getting data: " + str(r.status)
+                        getImageResult.append(error)
         else:
-            getImageResult = "Error getting data: " + str(r.status_code)
+            async with session.get('https://pokeapi.co/api/v2/pokemon/{}/'.format(i)) as r:
+                if r.status == 200:
+                    r = await r.json()
+                    getImageResult = r["sprites"]["front_default"]
+                else:
+                    getImageResult = "Error getting data: " + str(r.status)
+
     return getImageResult
 
 
 async def joinRerolls(pokemon, message):
-    pnn = getName(pokemon)
+    pnn = await getName(pokemon)
     rerolls = 2
     while True:
         await message.channel.send("""Your Pokemon are:
@@ -83,7 +88,7 @@ async def joinRerolls(pokemon, message):
                 if msg.content == '!keep':
                     return pokemon
                 else:
-                    msgname = msg.content.replace('!reroll ', '')
+                    msgname = msg.content.replace('!reroll ', '').strip()
                     ntclist = [name.lower() for name in pnn]
 
                     if msgname.isnumeric() == True:
@@ -96,7 +101,7 @@ async def joinRerolls(pokemon, message):
 
                     if ntc >= 0 and ntc <= 5:
                         rando = random.randint(1,809)
-                        name = getName(rando)
+                        name = await getName(rando)
                         pokemon[ntc] = rando
                         pnn[ntc] = name
                         rerolls -= 1
@@ -106,21 +111,23 @@ async def joinRerolls(pokemon, message):
             return pokemon
 
 #Only works for teams of 6
-#Join teamPicture and createImage into 1?
-#Can't await from inside the function, returning True just for some kind of error checking
-def teamPicture(teamArray):
+#Can't await from inside the function, returning True just for some kind of error checking // Not true anymore, but still have to change
+async def createImage(pokemon):
+    teamArray = []
+    async with aiohttp.ClientSession() as session:
+        for i in range(6):
+            async with session.get('https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{}.png'.format(pokemon[i])) as r:
+                if r.status == 200:
+                    r = await r.read()
+                    img = Image.open(BytesIO(r))
+                    teamArray.append(img)
+                else:
+                    teamArray.append('Error')
+
     dst = Image.new('RGBA', (576, 96), (255, 0, 0, 0))
     for i in range(6):
         dst.paste(teamArray[i], (96 * i,0))
-    return dst
-
-def createImage(pokemon):
-    teamArray = []
-    for i in range(6):
-        r = requests.get("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{}.png".format(pokemon[i]))
-        img = Image.open(BytesIO(r.content))
-        teamArray.append(img)
-    teamPicture(teamArray).save('data/teamPicture.png')
+    dst.save('data/teamPicture.png')
     return True
 
 
@@ -131,7 +138,7 @@ async def rerolls(roll, message):
     msg = await client.wait_for('message', timeout=180, check=pred)
     if msg.content.startswith('!reroll'):
         rando = random.randint(1,809)
-        roll = getImage(rando)
+        roll = await getImage(rando)
         newMsg = "Here is your new pokemon: {}".format(roll)
         profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
         await message.channel.send(newMsg)
@@ -187,7 +194,7 @@ async def on_message(message):
                        'coins': 0,
                        'pokemon': pokemon}
             profiles.insert_one(profile)
-            check = createImage(pokemon)
+            check = await createImage(pokemon)
             if check == True:
                 await message.channel.send(file=discord.File('data/teamPicture.png'))
 
@@ -243,9 +250,9 @@ async def on_message(message):
             rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
-                description = 'You have won 2 games! Would you like to !keep or !reroll: {}'.format(getName(rando))
+                description = 'You have won 2 games! Would you like to !keep or !reroll: {}'.format(await getName(rando))
             )
-            roll_msg.set_image(url=getImage(rando))
+            roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
             await rerolls(rando, message)
 
@@ -260,9 +267,9 @@ async def on_message(message):
             rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
-                description = 'You have lost 3 games. Would you like to !keep or !reroll: {}'.format(getName(rando))
+                description = 'You have lost 3 games. Would you like to !keep or !reroll: {}'.format(await getName(rando))
             )
-            roll_msg.set_image(url=getImage(rando))
+            roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
             await rerolls(rando, message)
 
@@ -271,7 +278,7 @@ async def on_message(message):
     if message.content.startswith('!a'):
         teamArray = []
         profile = profiles.find_one({'discordID': message.author.id})
-        check = createImage(profile["pokemon"])
+        check = await createImage(profile["pokemon"])
         if check == True:
             await message.channel.send(file=discord.File('data/teamPicture.png'))
 
