@@ -1,8 +1,11 @@
 import asyncio
+from src import my_bot
 import discord
 import random
 import aiohttp
 
-class TestBot(object):
-    async def test_join(self, *args):
-        pass
+class TestName(object):
+    def test_get_name():
+        name = my_bot.getName(1)
+        assert name == "Bulbasaur"
+
