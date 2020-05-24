@@ -100,6 +100,8 @@ async def joinRerolls(pokemon, message):
 
                     if ntc >= 0 and ntc <= 5:
                         rando = random.randint(1,809)
+                        while random.randint(1,809) in pokemon == True:
+                            rando = random.randint(1,809)
                         name = await getName(rando)
                         pokemon[ntc] = rando
                         pnn[ntc] = name
@@ -131,12 +133,14 @@ async def createImage(pokemon):
 
 
 #Rerolling function
-async def rerolls(roll, message):
+async def rerolls(roll, message, currentPokemon):
     def pred(m):
         return m.author == message.author and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
     msg = await client.wait_for('message', timeout=180, check=pred)
     if msg.content.startswith('!reroll'):
         rando = random.randint(1,809)
+        while rando in currentPokemon == True:
+            rando = random.randint(1,809)
         roll = await getImage(rando)
         newMsg = f"Here is your new pokemon: {roll}"
         profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
@@ -162,11 +166,9 @@ async def on_message(message):
         msg = discord.Embed(
             title = f'Hello {message.author.name}',
             description = """In order to get started, please type the !join command. Some other commands are:
-    !myprofile - Shows you your Trainer profile
-    !win - wip
-    !reroll - wip
-    !keep - wip
-    !ilose - wip"""
+    !myprofile - Display your trainer profile.
+    !win - Update your win count.
+    !ilose - Update your loss count."""
         )
         await message.channel.send(embed=msg)
 
@@ -178,9 +180,7 @@ async def on_message(message):
             msg = "You have already joined! To view your profile, type !myprofile"
             await message.channel.send(msg)
         else:
-            pokemon = []
-            for x in range(6):
-                pokemon.append(random.randint(1,809))
+            pokemon = random.sample(range(1,809), 6)
             pokemon = await joinRerolls(pokemon, message)
             profile = {'discordID': message.author.id,
                        'user': profileName(message.author.name, message.author.discriminator),
@@ -229,13 +229,15 @@ async def on_message(message):
 
         if profile['wins']%2==0:
             rando = random.randint(1,809)
+            while rando in profile['pokemon'] == True:
+                rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
                 description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
             )
             roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
-            await rerolls(rando, message)
+            await rerolls(rando, message, profile['pokemon'])
 
 
     if message.content.startswith('!ilose'):
@@ -246,13 +248,15 @@ async def on_message(message):
         await message.channel.send(lose_msg)
         if profile['loss']%3==0:
             rando = random.randint(1,809)
+            while rando in profile['pokemon'] == True:
+                rando = random.randint(1,809)
             roll_msg = discord.Embed(
                 title = 'New Pokemon!',
                 description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
             )
             roll_msg.set_image(url=await getImage(rando))
             await message.channel.send(embed=roll_msg)
-            await rerolls(rando, message)
+            await rerolls(rando, message, profile['pokemon'])
 
 
     #IMAGES TEST
