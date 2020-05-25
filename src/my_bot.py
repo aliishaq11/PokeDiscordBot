@@ -2,7 +2,7 @@ import asyncio
 import discord
 import random
 import json
-import bot_token
+import src.bot_token
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
@@ -275,4 +275,4 @@ async def on_ready():
     print(client.user.name)
     print('------')
 
-client.run(bot_token.bot_token)
+client.run(src.bot_token.bot_token)
