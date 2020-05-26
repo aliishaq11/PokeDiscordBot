@@ -1,5 +1,5 @@
 import asyncio
-from src import my_bot
+from src import getName
 import discord
 import random
 import aiohttp
