@@ -18,7 +18,10 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 pokedex = db.pokedex
-tokenVar = bot_token.bot_token
+try:
+    tokenVar = bot_token.bot_token
+except:
+    print("Travis workaround")
 
 async def getName(dexId):
     if type(dexId) == list:
