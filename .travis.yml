@@ -8,3 +8,4 @@ install:
 # command to run tests
 script:
   - python3 -m pytest
+  - pip install -e .
