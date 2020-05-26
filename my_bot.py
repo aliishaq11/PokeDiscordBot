@@ -14,29 +14,30 @@ client = discord.Client()
 mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
+pokedex = db.pokedex
 
 async def getName(dexId):
-    async with aiohttp.ClientSession() as session:
-        if type(dexId) == list:
-            namesList = []
-            for i in dexId:
-                async with session.get(f'https://pokeapi.co/api/v2/pokemon/{i}/') as r:
-                    if r.status == 200:
-                        r = await r.json()
-                        name = r['name'].capitalize()
-                        namesList.append(name)
-                    else:
-                        namesList.append('Error getting name')
-            return namesList
+    if type(dexId) == list:
+        namesList = []
+        for i in dexId:
+            pokemonDoc = pokedex.find_one({"id": i})
+            name = pokemonDoc['name'].capitalize()
+            namesList.append(name)
+        return namesList
+    else:
+        pokemonDoc = pokedex.find_one({"id": dexId})
+        name = pokemonDoc['name'].capitalize()
+    return name
 
-        else:
-            async with session.get(f'https://pokeapi.co/api/v2/pokemon/{dexId}/') as r:
-                if r.status == 200:
-                    r = await r.json()
-                    name = r['name'].capitalize()
-                else:
-                    name = 'Error getting name'
-            return name
+#Only works with pokedex id's for now
+async def getTier(dexId):
+    if type(dexId) == list:
+        tierList = []
+        for i in dexId:
+            pokemonDoc = pokedex.find_one({"id": i})
+            tier = pokemonDoc['tier']
+            tierList.append(tier)
+        return tierList
 
 #If we're just getting images we can pass in the number straight to image files that aren't hosted by the API, see createImage() requests
 async def getImage(dexId):
@@ -210,9 +211,15 @@ async def on_message(message):
             profilemsg.add_field(name='Coins', value=f'{profile["coins"]}')
             #profilemsg.set_thumbnail(url=message.author.avatar_url)
 
+            pokemonNames = await getName(profile['pokemon'])
+            pokemonTiers = await getTier(profile['pokemon'])
+
+            origString = ""
+            for i in range(len(pokemonNames)):
+                origString += "**" + pokemonNames[i] + "**, Tier: " + pokemonTiers[i] + "\n"
 
             await message.channel.send(file=image, embed=profilemsg)
-            await message.channel.send(f"Pokemons list WIP: {profile['pokemon']}")
+            await message.channel.send(origString)
         else:
             await message.channel.send('You have not joined yet, type "!join" first.')
 
