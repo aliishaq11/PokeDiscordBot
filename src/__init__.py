@@ -1,1 +1,1 @@
-from my_bot import getName
+import my_bot
