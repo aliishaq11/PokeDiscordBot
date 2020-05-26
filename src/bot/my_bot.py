@@ -17,7 +17,10 @@ client = discord.Client()
 mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
-tokenVar = bot_token.bot_token
+try:
+    tokenVar = bot_token.bot_token
+except:
+    print("Travis workaround")
 
 async def getName(dexId):
     async with aiohttp.ClientSession() as session:
