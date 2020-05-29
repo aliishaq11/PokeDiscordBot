@@ -2,7 +2,10 @@ import asyncio
 import discord
 import random
 import json
-import bot_token
+try:
+    import bot_token
+except:
+    tokenVar = 0
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
@@ -15,6 +18,10 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 pokedex = db.pokedex
+try:
+    tokenVar = bot_token.bot_token
+except:
+    print("Travis workaround")
 
 async def getName(dexId):
     if type(dexId) == list:
@@ -282,4 +289,5 @@ async def on_ready():
     print(client.user.name)
     print('------')
 
-client.run(bot_token.bot_token)
+if tokenVar != 0:
+    client.run(bot_token.bot_token)
