@@ -141,9 +141,9 @@ async def createImage(pokemon):
 
 
 #Rerolling function
-async def rerolls(roll, message, currentPokemon):
+async def rerolls(roll, message, currentPokemon, user):
     def pred(m):
-        return m.author == message.author and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
+        return m.author.id == user and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
     msg = await client.wait_for('message', timeout=180, check=pred)
     if msg.content.startswith('!reroll'):
         rando = random.randint(1,809)
@@ -230,48 +230,72 @@ async def on_message(message):
         else:
             await message.channel.send('You have not joined yet, type "!join" first.')
 
+    # Allows user to claim either victory or defeat (!ibeat or !ilost) and records wins/losses for both users.
+    # Increment wins by 1 and coins by 40. Increment loss by 1 and coins by 20.
+    # Every 2 wins means a new roll and every 3 losses means new roll.
+    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')) and message.mentions[0].id != message.author.id and len(message.mentions) == 1: 
+        userCount = 0
+        try: 
+            mentioned = message.mentions[0].id
+            eligibleUsers = [message.author.id, mentioned]
+            for i, v in enumerate(eligibleUsers):
+                userCount += profiles.count_documents({'discordID': v})
+        except:
+            err_msg = 'No user mentioned, please mention at least a single user, ex: !ibeat @<username>'
+        else: 
+            if userCount == 2:
+                if message.content.startswith('!ibeat'):
+                    updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
+                                                                            {"wins": 1, "coins": 40}})
+                    updateloss = profiles.find_one_and_update({'discordID': mentioned}, {"$inc":
+                                                                                {"loss": 1, "coins": 20}})
+                    winProfile = profiles.find_one({'discordID': message.author.id})
+                    loseProfile = profiles.find_one({'discordID': mentioned})
+                elif message.content.startswith('!ilost'):
+                    updatewin = profiles.find_one_and_update({'discordID': mentioned}, {"$inc":
+                                                                            {"wins": 1, "coins": 40}})
+                    updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
+                                                                                {"loss": 1, "coins": 20}})
+                    winProfile = profiles.find_one({'discordID': mentioned})
+                    loseProfile = profiles.find_one({'discordID': message.author.id})
 
-    # Allow user to record their wins and losses. Increment wins by 1 and coins
-    # by 40. Increment loss by 1 and coins by 20.
-    # Every 2 wins means a new roll for the User. Every 3 losses means new roll.
-    if message.content.startswith('!iwin'):
-        updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
-                                                                     {"wins": 1, "coins": 40}})
-        profile = profiles.find_one({'discordID': message.author.id})
-        win_msg = f"Your win has been recorded. You now have {profile['wins']} wins!"
-        await message.channel.send(win_msg)
+                profile = profiles.find_one({'discordID': message.author.id})
+                vsProfile = profiles.find_one({'discordID': mentioned})
+                vs_msg = f'''<@{message.author.id}> now has {profile['wins']} wins and {profile['loss']} losses! 
+<@{mentioned}> now has {vsProfile['wins']} wins and {vsProfile['loss']} losses!'''
+                await message.channel.send(vs_msg)
 
-        if profile['wins']%2==0:
-            rando = random.randint(1,809)
-            while rando in profile['pokemon'] == True:
-                rando = random.randint(1,809)
-            roll_msg = discord.Embed(
-                title = 'New Pokemon!',
-                description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
-            )
-            roll_msg.set_image(url=await getImage(rando))
-            await message.channel.send(embed=roll_msg)
-            await rerolls(rando, message, profile['pokemon'])
+                if winProfile['wins']%2==0:
+                    rando = random.randint(1,809)
+                    while rando in winProfile['pokemon'] == True:
+                        rando = random.randint(1,809)
+                    roll_msg = discord.Embed(
+                        title = 'New Pokemon!',
+                        description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
+                    )
+                    roll_msg.set_image(url=await getImage(rando))
+                    await message.channel.send(embed=roll_msg)
+                    await rerolls(rando, message, winProfile['pokemon'], winProfile['discordID'])
+                
+                if loseProfile['loss']%3==0:
+                    rando = random.randint(1,809)
+                    while rando in loseProfile['pokemon'] == True:
+                        rando = random.randint(1,809)
+                    roll_msg = discord.Embed(
+                        title = 'New Pokemon!',
+                        description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
+                    )
+                    roll_msg.set_image(url=await getImage(rando))
+                    await message.channel.send(embed=roll_msg)
+                    await rerolls(rando, message, loseProfile['pokemon'], loseProfile['discordID'])
+            else:
+                err_msg = 'The user(s) mentioned do not exist or have not created a profile. Please use the !myprofile command to check if a profile exists. If not, use the !join command to create one.'
+                await message.channel.send(err_msg)
 
-
-    if message.content.startswith('!ilose'):
-        updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
-                                                                        {"loss": 1, "coins": 20}})
-        profile = profiles.find_one({'discordID': message.author.id})
-        lose_msg = f"Your loss has been recorded. You now have {profile['loss']} losses."
-        await message.channel.send(lose_msg)
-        if profile['loss']%3==0:
-            rando = random.randint(1,809)
-            while rando in profile['pokemon'] == True:
-                rando = random.randint(1,809)
-            roll_msg = discord.Embed(
-                title = 'New Pokemon!',
-                description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
-            )
-            roll_msg.set_image(url=await getImage(rando))
-            await message.channel.send(embed=roll_msg)
-            await rerolls(rando, message, profile['pokemon'])
-
+    # Check for multiple mentions when using !ibeat or !ilost.
+    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')) and len(message.mentions) != 1: 
+        err_msg = 'Please only mention a single user at a time, ex: !ibeat @<username>'
+        await message.channel.send(err_msg)
 
     #IMAGES TEST
     if message.content.startswith('!a'):
