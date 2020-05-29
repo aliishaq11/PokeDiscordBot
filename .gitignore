@@ -1,5 +1,6 @@
 data.json
 bot_token.py
 src/bot/data/teamPicture.png
+src/bot.egg-info/
 
 __pycache__/
