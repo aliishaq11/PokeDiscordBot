@@ -1,6 +1,7 @@
 import asyncio
 import discord
 import random
+from random import choice
 import json
 try:
     import bot_token
@@ -9,6 +10,7 @@ except:
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
+from pymongo.collection import ReturnDocument
 import aiohttp
 from PIL import Image
 from io import BytesIO
@@ -18,21 +20,17 @@ mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
 profiles = db.profiles
 pokedex = db.pokedex
-try:
-    tokenVar = bot_token.bot_token
-except:
-    print("Travis workaround")
 
 async def getName(dexId):
     if type(dexId) == list:
         namesList = []
         for i in dexId:
-            pokemonDoc = pokedex.find_one({"id": i})
+            pokemonDoc = pokedex.find_one({'id': i})
             name = pokemonDoc['name'].capitalize()
             namesList.append(name)
         return namesList
     else:
-        pokemonDoc = pokedex.find_one({"id": dexId})
+        pokemonDoc = pokedex.find_one({'id': dexId})
         name = pokemonDoc['name'].capitalize()
     return name
 
@@ -45,32 +43,59 @@ async def getTier(dexId):
             tier = pokemonDoc['tier']
             tierList.append(tier)
         return tierList
+    else:
+        pokemonDoc = pokedex.find_one({"id": dexId})
+        tier = pokemonDoc['tier']
+        return tier
 
-#If we're just getting images we can pass in the number straight to image files that aren't hosted by the API, see createImage() requests
+
+async def getPokemon(pokeArray):
+    randPoke = choice([i for i in range(1,891) if i not in pokeArray])
+    poke = await evoUp(randPoke)
+
+    #checks if evolution is in array
+    while poke in pokeArray:
+        print('Duplicate detected')
+        randPoke = choice([i for i in range(1,891) if i not in pokeArray])
+        poke = await evoUp(randPoke)
+
+    #checks if pokemon is unusable
+    pokemonDoc = pokedex.find_one({"id": poke})
+    pokeTier = pokemonDoc['tier']
+    if pokeTier == 'Illegal' or pokeTier == 'Uber':
+        print('Illegal detected')
+        poke = await getPokemon(pokeArray)
+    return poke
+
+#Does not work with gen 8
 async def getImage(dexId):
-    async with aiohttp.ClientSession() as session:
+    if type(dexId) == list:
+        getImageResult = []
+        for i in dexId:
+            image = f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{i}.png'
+            getImageResult.append(image)
+    else:
+        image = f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{dexId}.png'
+        return image
 
-        if type(dexId) == list:
-            for i in dexId:
-                async with session.get(f'https://pokeapi.co/api/v2/pokemon/{i}/') as r:
-                    getImageResult = []
-                    if r.status == 200:
-                        r = await r.json()
-                        picture = r["sprites"]["front_default"]
-                        getImageResult.append(picture)
-                    else:
-                        error = "Error getting data: " + str(r.status)
-                        getImageResult.append(error)
-        else:
-            async with session.get(f'https://pokeapi.co/api/v2/pokemon/{dexId}/') as r:
-                if r.status == 200:
-                    r = await r.json()
-                    getImageResult = r["sprites"]["front_default"]
-                else:
-                    getImageResult = "Error getting data: " + str(r.status)
 
-    return getImageResult
-
+async def evoUp(dexId):
+    pokemonDoc = pokedex.find_one({'id': dexId})
+    if len(pokemonDoc['evo']) > 1:
+        pickEvo = random.randint(0, len(pokemonDoc['evo'])-1)
+        pokeName = pokemonDoc['evo'][pickEvo]
+        evoDoc = pokedex.find_one({'name': pokeName})
+        print(pokeName)
+        recurs = await evoUp(evoDoc['id'])
+        return recurs
+    elif len(pokemonDoc['evo']) == 1:
+        pokeName = pokemonDoc['evo'][0]
+        evoDoc = pokedex.find_one({'name': pokeName})
+        print(pokeName)
+        recurs = await evoUp(evoDoc['id'])
+        return recurs
+    elif len(pokemonDoc['evo']) == 0:
+        return dexId
 
 async def joinRerolls(pokemon, message):
     pnn = await getName(pokemon)
@@ -107,9 +132,9 @@ async def joinRerolls(pokemon, message):
                             ntc = -1
 
                     if ntc >= 0 and ntc <= 5:
-                        rando = random.randint(1,809)
-                        while random.randint(1,809) in pokemon == True:
-                            rando = random.randint(1,809)
+                        rando = await getPokemon(pokemon)
+                        while rando in pokemon:
+                            rando = await getPokemon(pokemon)
                         name = await getName(rando)
                         pokemon[ntc] = rando
                         pnn[ntc] = name
@@ -144,19 +169,25 @@ async def createImage(pokemon):
 async def rerolls(roll, message, currentPokemon, user):
     def pred(m):
         return m.author.id == user and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
-    msg = await client.wait_for('message', timeout=180, check=pred)
-    if msg.content.startswith('!reroll'):
-        rando = random.randint(1,809)
-        while rando in currentPokemon == True:
-            rando = random.randint(1,809)
-        roll = await getImage(rando)
-        newMsg = f"Here is your new pokemon: {roll}"
-        profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
-        await message.channel.send(newMsg)
-    elif msg.content.startswith('!keep'):
+    try:
+        msg = ''
+        msg = await client.wait_for('message', timeout=180, check=pred)
+    except asyncio.TimeoutError:
         newMsg = f"You have kept: {roll}"
-        profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
+        profiles.find_one_and_update({'discordID': user}, {'$push': {'pokemon': roll}})
         await message.channel.send(newMsg)
+    else:
+        if msg.content.startswith('!reroll'):
+            currentPokemon.append(roll)
+            rando = await getPokemon(currentPokemon)
+            roll = await getImage(rando)
+            newMsg = f"Here is your new pokemon: {roll}"
+            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
+            await message.channel.send(newMsg)
+        elif msg.content.startswith('!keep'):
+            newMsg = f"You have kept: {roll}"
+            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
+            await message.channel.send(newMsg)
 
 
 def profileName(name, discriminator):
@@ -175,8 +206,8 @@ async def on_message(message):
             title = f'Hello {message.author.name}',
             description = """In order to get started, please type the !join command. Some other commands are:
     !myprofile - Display your trainer profile.
-    !win - Update your win count.
-    !ilose - Update your loss count."""
+    !ibeat @user - Update your win count.
+    !ilost @user - Update your loss count."""
         )
         await message.channel.send(embed=msg)
 
@@ -188,8 +219,11 @@ async def on_message(message):
             msg = "You have already joined! To view your profile, type !myprofile"
             await message.channel.send(msg)
         else:
-            pokemon = random.sample(range(1,809), 6)
-            pokemon = await joinRerolls(pokemon, message)
+            evolist = []
+            for i in range(6):
+                newPoke = await getPokemon(evolist)
+                evolist.append(newPoke)
+            pokemon = await joinRerolls(evolist, message)
             profile = {'discordID': message.author.id,
                        'user': profileName(message.author.name, message.author.discriminator),
                        'wins': 0,
@@ -203,20 +237,20 @@ async def on_message(message):
 
     # Call User's profile using discordID
     if message.content.startswith('!myprofile'):
-        profileID = profileName(message.author.name, message.author.discriminator)
-        profile = profiles.find_one({"discordID": message.author.id})
-        if profiles.count_documents({"user": profileID}) != 0:
+        if profiles.count_documents({"discordID": message.author.id}) != 0:
+            profile = profiles.find_one({"discordID": message.author.id})
+
             profilemsg = discord.Embed(
-                #title = "Trainer "+ message.author.name,
                 description = f'Total games: {profile["wins"] + profile["loss"]}'
             )
             profilemsg.set_author(name='Trainer ' + message.author.name, icon_url=message.author.avatar_url)
-            image = discord.File('data/teamPicture.png', filename='teamPicture.png') #Save images to <id>.png and call them back?
+            sixPokeImage = random.sample(profile['pokemon'], 6)
+            await createImage(sixPokeImage)
+            image = discord.File('data/teamPicture.png', filename='teamPicture.png')
             profilemsg.set_image(url='attachment://teamPicture.png')
             profilemsg.add_field(name='Wins', value=f'{profile["wins"]}')
             profilemsg.add_field(name='Losses', value=f'{profile["loss"]}')
             profilemsg.add_field(name='Coins', value=f'{profile["coins"]}')
-            #profilemsg.set_thumbnail(url=message.author.avatar_url)
 
             pokemonNames = await getName(profile['pokemon'])
             pokemonTiers = await getTier(profile['pokemon'])
@@ -233,42 +267,42 @@ async def on_message(message):
     # Allows user to claim either victory or defeat (!ibeat or !ilost) and records wins/losses for both users.
     # Increment wins by 1 and coins by 40. Increment loss by 1 and coins by 20.
     # Every 2 wins means a new roll and every 3 losses means new roll.
-    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')) and message.mentions[0].id != message.author.id and len(message.mentions) == 1: 
-        userCount = 0
-        try: 
+    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')):
+        # Check for multiple mentions or no mentions when using !ibeat or !ilost.
+        if len(message.mentions) > 1:
+            err_msg = 'Please only mention a single user at a time, ex: !ibeat @<username>'
+            await message.channel.send(err_msg)
+        elif len(message.mentions) == 0:
+            err_msg = 'No user mentioned, please mention at least a single user, ex: !ibeat @<username>'
+            await message.channel.send(err_msg)
+        elif message.mentions[0].id == message.author.id:
+            err_msg = 'https://www.youtube.com/watch?v=Zd9muK2M36c'
+            await message.channel.send(err_msg)
+        else:
+            userCount = 0
             mentioned = message.mentions[0].id
             eligibleUsers = [message.author.id, mentioned]
             for i, v in enumerate(eligibleUsers):
                 userCount += profiles.count_documents({'discordID': v})
-        except:
-            err_msg = 'No user mentioned, please mention at least a single user, ex: !ibeat @<username>'
-        else: 
+
             if userCount == 2:
                 if message.content.startswith('!ibeat'):
-                    updatewin = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
-                                                                            {"wins": 1, "coins": 40}})
-                    updateloss = profiles.find_one_and_update({'discordID': mentioned}, {"$inc":
-                                                                                {"loss": 1, "coins": 20}})
-                    winProfile = profiles.find_one({'discordID': message.author.id})
-                    loseProfile = profiles.find_one({'discordID': mentioned})
+                    winner = eligibleUsers[0]
+                    loser = eligibleUsers[1]
                 elif message.content.startswith('!ilost'):
-                    updatewin = profiles.find_one_and_update({'discordID': mentioned}, {"$inc":
-                                                                            {"wins": 1, "coins": 40}})
-                    updateloss = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
-                                                                                {"loss": 1, "coins": 20}})
-                    winProfile = profiles.find_one({'discordID': mentioned})
-                    loseProfile = profiles.find_one({'discordID': message.author.id})
+                    winner = eligibleUsers[1]
+                    loser = eligibleUsers[0]
 
-                profile = profiles.find_one({'discordID': message.author.id})
-                vsProfile = profiles.find_one({'discordID': mentioned})
-                vs_msg = f'''<@{message.author.id}> now has {profile['wins']} wins and {profile['loss']} losses! 
-<@{mentioned}> now has {vsProfile['wins']} wins and {vsProfile['loss']} losses!'''
+                winProfile = profiles.find_one_and_update({'discordID': winner}, {"$inc":
+                    {"wins": 1, "coins": 40}}, return_document=ReturnDocument.AFTER)
+                loseProfile = profiles.find_one_and_update({'discordID': loser}, {"$inc":
+                    {"loss": 1, "coins": 20}}, return_document=ReturnDocument.AFTER)
+                vs_msg = (f'<@{winner}> now has {winProfile["wins"]} wins and {winProfile["loss"]} losses!\n'
+                f'<@{loser}> now has {loseProfile["wins"]} wins and {loseProfile["loss"]} losses!')
                 await message.channel.send(vs_msg)
 
                 if winProfile['wins']%2==0:
-                    rando = random.randint(1,809)
-                    while rando in winProfile['pokemon'] == True:
-                        rando = random.randint(1,809)
+                    rando = await getPokemon(winProfile['pokemon'])
                     roll_msg = discord.Embed(
                         title = 'New Pokemon!',
                         description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
@@ -276,11 +310,9 @@ async def on_message(message):
                     roll_msg.set_image(url=await getImage(rando))
                     await message.channel.send(embed=roll_msg)
                     await rerolls(rando, message, winProfile['pokemon'], winProfile['discordID'])
-                
+
                 if loseProfile['loss']%3==0:
-                    rando = random.randint(1,809)
-                    while rando in loseProfile['pokemon'] == True:
-                        rando = random.randint(1,809)
+                    rando = await getPokemon(loseProfile['pokemon'])
                     roll_msg = discord.Embed(
                         title = 'New Pokemon!',
                         description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
@@ -291,11 +323,6 @@ async def on_message(message):
             else:
                 err_msg = 'The user(s) mentioned do not exist or have not created a profile. Please use the !myprofile command to check if a profile exists. If not, use the !join command to create one.'
                 await message.channel.send(err_msg)
-
-    # Check for multiple mentions when using !ibeat or !ilost.
-    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')) and len(message.mentions) != 1: 
-        err_msg = 'Please only mention a single user at a time, ex: !ibeat @<username>'
-        await message.channel.send(err_msg)
 
     #IMAGES TEST
     if message.content.startswith('!a'):
@@ -313,5 +340,8 @@ async def on_ready():
     print(client.user.name)
     print('------')
 
-if tokenVar != 0:
-    client.run(bot_token.bot_token)
+try:
+    tokenVar = bot_token.bot_token
+    client.run(tokenVar)
+except:
+    print("No bot token found. Travis testing?")
