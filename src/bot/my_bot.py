@@ -289,9 +289,11 @@ async def on_message(message):
                 if message.content.startswith('!ibeat'):
                     winner = eligibleUsers[0]
                     loser = eligibleUsers[1]
+                    msgWinner = True
                 elif message.content.startswith('!ilost'):
                     winner = eligibleUsers[1]
                     loser = eligibleUsers[0]
+                    msgWinner = False
 
                 winProfile = profiles.find_one_and_update({'discordID': winner}, {"$inc":
                     {"wins": 1, "coins": 40}}, return_document=ReturnDocument.AFTER)
@@ -301,25 +303,35 @@ async def on_message(message):
                 f'<@{loser}> now has {loseProfile["wins"]} wins and {loseProfile["loss"]} losses!')
                 await message.channel.send(vs_msg)
 
-                if winProfile['wins']%2==0:
-                    rando = await getPokemon(winProfile['pokemon'])
-                    roll_msg = discord.Embed(
-                        title = 'New Pokemon!',
-                        description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
-                    )
-                    roll_msg.set_image(url=await getImage(rando))
-                    await message.channel.send(embed=roll_msg)
-                    await rerolls(rando, message, winProfile['pokemon'], winProfile['discordID'])
+                #Functions to call the messager first below
+                async def winnerCheck(winProfile, message):
+                    if winProfile['wins']%2==0:
+                        rando = await getPokemon(winProfile['pokemon'])
+                        roll_msg = discord.Embed(
+                            title = 'New Pokemon!',
+                            description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
+                        )
+                        roll_msg.set_image(url=await getImage(rando))
+                        await message.channel.send(embed=roll_msg)
+                        await rerolls(rando, message, winProfile['pokemon'], winProfile['discordID'])
 
-                if loseProfile['loss']%3==0:
-                    rando = await getPokemon(loseProfile['pokemon'])
-                    roll_msg = discord.Embed(
-                        title = 'New Pokemon!',
-                        description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
-                    )
-                    roll_msg.set_image(url=await getImage(rando))
-                    await message.channel.send(embed=roll_msg)
-                    await rerolls(rando, message, loseProfile['pokemon'], loseProfile['discordID'])
+                async def loserCheck(loseProfile, message):
+                    if loseProfile['loss']%3==0:
+                        rando = await getPokemon(loseProfile['pokemon'])
+                        roll_msg = discord.Embed(
+                            title = 'New Pokemon!',
+                            description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
+                        )
+                        roll_msg.set_image(url=await getImage(rando))
+                        await message.channel.send(embed=roll_msg)
+                        await rerolls(rando, message, loseProfile['pokemon'], loseProfile['discordID'])
+
+                if msgWinner == True:
+                    await winnerCheck(winProfile, message)
+                    await loserCheck(loseProfile, message)
+                elif msgWinner == False:
+                    await loserCheck(loseProfile, message)
+                    await winnerCheck(winProfile, message)
             else:
                 err_msg = 'The user(s) mentioned do not exist or have not created a profile. Please use the !myprofile command to check if a profile exists. If not, use the !join command to create one.'
                 await message.channel.send(err_msg)
