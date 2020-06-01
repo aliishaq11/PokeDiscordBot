@@ -48,36 +48,34 @@ async def getTier(dexId):
         tier = pokemonDoc['tier']
         return tier
 
-
+#pokeArray has to be list of pokemon already owned by user, so as to not roll them again
 async def getPokemon(pokeArray):
     randPoke = choice([i for i in range(1,891) if i not in pokeArray])
     poke = await evoUp(randPoke)
 
     #checks if evolution is in array
     while poke in pokeArray:
-        print('Duplicate detected')
-        randPoke = choice([i for i in range(1,891) if i not in pokeArray])
-        poke = await evoUp(randPoke)
+        poke = await getPokemon(pokeArray)
 
     #checks if pokemon is unusable
     pokemonDoc = pokedex.find_one({"id": poke})
     pokeTier = pokemonDoc['tier']
     if pokeTier == 'Illegal' or pokeTier == 'Uber':
-        print('Illegal detected')
         poke = await getPokemon(pokeArray)
+
     return poke
 
-#Does not work with gen 8
+#PokeAPI does not work with gen 8
 async def getImage(dexId):
     if type(dexId) == list:
         getImageResult = []
         for i in dexId:
             image = f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{i}.png'
             getImageResult.append(image)
+            return getImageResult
     else:
         image = f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{dexId}.png'
         return image
-
 
 async def evoUp(dexId):
     pokemonDoc = pokedex.find_one({'id': dexId})
@@ -148,51 +146,20 @@ async def joinRerolls(pokemon, message):
 #Can't await from inside the function, returning True just for some kind of error checking // Not true anymore, but still have to change
 async def createImage(pokemon):
     teamArray = []
-    async with aiohttp.ClientSession() as session:
-        for i in pokemon:
-            async with session.get(f'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{i}.png') as r:
-                if r.status == 200:
-                    r = await r.read()
-                    img = Image.open(BytesIO(r))
-                    teamArray.append(img)
-                else:
-                    teamArray.append('Error')
+    for i in pokemon:
+        img = Image.open(f'data/images/{i}.png')
+        teamArray.append(img)
 
-    dst = Image.new('RGBA', (576, 96), (255, 0, 0, 0))
+    dst = Image.new('RGBA', (720, 100), (255, 0, 0, 0))
     for i in range(6):
-        dst.paste(teamArray[i], (96 * i,0))
+        dst.paste(teamArray[i], (120 * i,0))
     dst.save('data/teamPicture.png')
     return True
-
-
-#Rerolling function
-async def rerolls(roll, message, currentPokemon, user):
-    def pred(m):
-        return m.author.id == user and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
-    try:
-        msg = ''
-        msg = await client.wait_for('message', timeout=180, check=pred)
-    except asyncio.TimeoutError:
-        newMsg = f"You have kept: {roll}"
-        profiles.find_one_and_update({'discordID': user}, {'$push': {'pokemon': roll}})
-        await message.channel.send(newMsg)
-    else:
-        if msg.content.startswith('!reroll'):
-            currentPokemon.append(roll)
-            rando = await getPokemon(currentPokemon)
-            roll = await getImage(rando)
-            newMsg = f"Here is your new pokemon: {roll}"
-            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
-            await message.channel.send(newMsg)
-        elif msg.content.startswith('!keep'):
-            newMsg = f"You have kept: {roll}"
-            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
-            await message.channel.send(newMsg)
-
 
 def profileName(name, discriminator):
     profileID = str(name) + str(discriminator)
     return profileID
+
 
 @client.event
 async def on_message(message):
@@ -257,7 +224,7 @@ async def on_message(message):
 
             origString = ""
             for i in range(len(pokemonNames)):
-                origString += "**" + pokemonNames[i] + "**, Tier: " + pokemonTiers[i] + "\n"
+                origString += f'**{pokemonNames[i]}**, Tier: {pokemonTiers[i]}\n'
 
             await message.channel.send(file=image, embed=profilemsg)
             await message.channel.send(origString)
@@ -326,6 +293,29 @@ async def on_message(message):
                         await message.channel.send(embed=roll_msg)
                         await rerolls(rando, message, loseProfile['pokemon'], loseProfile['discordID'])
 
+                async def rerolls(roll, message, currentPokemon, user):
+                    def pred(m):
+                        return m.author.id == user and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
+                    try:
+                        msg = await client.wait_for('message', timeout=180, check=pred)
+                    except asyncio.TimeoutError:
+                        newMsg = f"You have kept: {roll}"
+                        profiles.find_one_and_update({'discordID': user}, {'$push': {'pokemon': roll}})
+                        await message.channel.send(newMsg)
+                    else:
+                        if msg.content.startswith('!reroll'):
+                            currentPokemon.append(roll)
+                            rando = await getPokemon(currentPokemon)
+                            roll = await getImage(rando)
+                            newMsg = f"Here is your new pokemon: {roll}"
+                            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
+                            await message.channel.send(newMsg)
+                        elif msg.content.startswith('!keep'):
+                            newMsg = f"You have kept: {roll}"
+                            profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
+                            await message.channel.send(newMsg)
+
+
                 if msgWinner == True:
                     await winnerCheck(winProfile, message)
                     await loserCheck(loseProfile, message)
@@ -337,12 +327,58 @@ async def on_message(message):
                 await message.channel.send(err_msg)
 
     #IMAGES TEST
-    if message.content.startswith('!a'):
-        teamArray = []
-        profile = profiles.find_one({'discordID': message.author.id})
-        check = await createImage(profile["pokemon"])
-        if check == True:
-            await message.channel.send(file=discord.File('data/teamPicture.png'))
+    if message.content.startswith('!ppic'):
+        pokes = message.content.replace('!ppic ', '').lower().strip()
+        pokes = pokes.split(' ')
+        print(pokes)
+        profile = profiles.find_one({"discordID": message.author.id})
+        if len(pokes) == 6:
+            pokenums = []
+            for i in pokes:
+                pokemonDoc = pokedex.find_one({'name': i})
+                pokenums.append(pokemonDoc['id'])
+            if set(pokenums).issubset(profile['pokemon']):
+                print('True')
+
+    if message.content.startswith('!shop') or message.content.startswith('!buy'):
+        items = {
+        'typeegg': 120,
+        'randegg': 100,
+        'title': 60
+        }
+        if message.content.startswith('!shop'):
+            shopMsg = discord.Embed(
+                title = 'Poke Mart',
+                description = f'Items:'
+            )
+            shopMsg.set_thumbnail(url='https://cdn.bulbagarden.net/upload/f/f8/Pok%C3%A9_Mart_interior_FRLG.png')
+            for i in items:
+                shopMsg.add_field(name=i, value=items[i], inline=False)
+            await message.channel.send(embed=shopMsg)
+
+        elif message.content.startswith('!buy'):
+            profile = profiles.find_one({"discordID": message.author.id})
+            boughtItem = message.content.replace('!buy ', '').lower().strip()
+            if boughtItem in items:
+                if profile['coins'] >= items[boughtItem]:
+                    profileAfter = profiles.find_one_and_update({'discordID': message.author.id}, {"$inc":
+                        {"coins": -items[boughtItem]}}, return_document=ReturnDocument.AFTER)
+
+                    async def singleRoll(rando, message):
+                        rollMsg = discord.Embed(
+                            title = 'New Pokemon!',
+                            description = f'{await getName(rando)} has hatched!'
+                        )
+                        rollMsg.set_image(url=await getImage(rando))
+                        await message.channel.send(embed=rollMsg)
+
+                    if boughtItem == 'randegg':
+                        rando = await getPokemon(profileAfter['pokemon'])
+                        profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': rando}})
+                        await singleRoll(rando, message)
+
+
+
 
 
 @client.event
