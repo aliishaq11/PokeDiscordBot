@@ -15,6 +15,8 @@ import aiohttp
 from PIL import Image
 from io import BytesIO
 
+from discord.ext import tasks, commands
+
 client = discord.Client()
 mongo = MongoClient('localhost', 27017)
 db = mongo.PokeDiscordBot
@@ -234,7 +236,7 @@ async def on_message(message):
     # Allows user to claim either victory or defeat (!ibeat or !ilost) and records wins/losses for both users.
     # Increment wins by 1 and coins by 40. Increment loss by 1 and coins by 20.
     # Every 2 wins means a new roll and every 3 losses means new roll.
-    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')):
+    if (message.content.startswith('!ibeat') or message.content.startswith('!ilost')) and not str(message.channel).startswith('Direct '):
         # Check for multiple mentions or no mentions when using !ibeat or !ilost.
         if len(message.mentions) > 1:
             err_msg = 'Please only mention a single user at a time, ex: !ibeat @<username>'
@@ -256,11 +258,9 @@ async def on_message(message):
                 if message.content.startswith('!ibeat'):
                     winner = eligibleUsers[0]
                     loser = eligibleUsers[1]
-                    msgWinner = True
                 elif message.content.startswith('!ilost'):
                     winner = eligibleUsers[1]
                     loser = eligibleUsers[0]
-                    msgWinner = False
 
                 winProfile = profiles.find_one_and_update({'discordID': winner}, {"$inc":
                     {"wins": 1, "coins": 40}}, return_document=ReturnDocument.AFTER)
@@ -279,8 +279,9 @@ async def on_message(message):
                             description = f'You have won 2 games! Would you like to !keep or !reroll: {await getName(rando)}'
                         )
                         roll_msg.set_image(url=await getImage(rando))
-                        await message.channel.send(embed=roll_msg)
-                        await rerolls(rando, message, winProfile['pokemon'], winProfile['discordID'])
+                        user = client.get_user(winProfile['discordID'])
+                        await user.send(embed=roll_msg)
+                        await rerolls(rando, user, winProfile['pokemon'], winProfile['discordID'])
 
                 async def loserCheck(loseProfile, message):
                     if loseProfile['loss']%3==0:
@@ -290,14 +291,15 @@ async def on_message(message):
                             description = f'You have lost 3 games. Would you like to !keep or !reroll: {await getName(rando)}'
                         )
                         roll_msg.set_image(url=await getImage(rando))
-                        await message.channel.send(embed=roll_msg)
-                        await rerolls(rando, message, loseProfile['pokemon'], loseProfile['discordID'])
+                        user = client.get_user(loseProfile['discordID'])
+                        await user.send(embed=roll_msg)
+                        await rerolls(rando, user, loseProfile['pokemon'], loseProfile['discordID'])
 
                 async def rerolls(roll, message, currentPokemon, user):
                     def pred(m):
-                        return m.author.id == user and m.channel == message.channel and (m.content == '!keep' or m.content == '!reroll')
+                        return m.author == message and (m.content == '!keep' or m.content == '!reroll')
                     try:
-                        msg = await client.wait_for('message', timeout=180, check=pred)
+                        msg = await client.wait_for('message', timeout=600, check=pred)
                     except asyncio.TimeoutError:
                         newMsg = f"You have kept: {roll}"
                         profiles.find_one_and_update({'discordID': user}, {'$push': {'pokemon': roll}})
@@ -309,19 +311,14 @@ async def on_message(message):
                             roll = await getImage(rando)
                             newMsg = f"Here is your new pokemon: {roll}"
                             profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': rando}})
-                            await message.channel.send(newMsg)
+                            await message.send(newMsg)
                         elif msg.content.startswith('!keep'):
                             newMsg = f"You have kept: {roll}"
                             profiles.find_one_and_update({'discordID': msg.author.id}, {'$push': {'pokemon': roll}})
-                            await message.channel.send(newMsg)
+                            await message.send(newMsg)
 
-
-                if msgWinner == True:
-                    await winnerCheck(winProfile, message)
-                    await loserCheck(loseProfile, message)
-                elif msgWinner == False:
-                    await loserCheck(loseProfile, message)
-                    await winnerCheck(winProfile, message)
+                client.loop.create_task(winnerCheck(winProfile, message))
+                client.loop.create_task(loserCheck(loseProfile, message))
             else:
                 err_msg = 'The user(s) mentioned do not exist or have not created a profile. Please use the !myprofile command to check if a profile exists. If not, use the !join command to create one.'
                 await message.channel.send(err_msg)
@@ -376,7 +373,6 @@ async def on_message(message):
                         rando = await getPokemon(profileAfter['pokemon'])
                         profiles.find_one_and_update({'discordID': message.author.id}, {'$push': {'pokemon': rando}})
                         await singleRoll(rando, message)
-
 
 
 
